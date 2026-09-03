@@ -172,12 +172,26 @@ test('Accidental Double Click does not create duplicate API submissions', async 
     );
     expect(submissions.length).toBeGreaterThan(0);
 
-    const submissionCounts = submissions.reduce<Record<string, number>>((acc, signature) => {
-      acc[signature] = (acc[signature] ?? 0) + 1;
+    const submissionCounts = capturedRequests.reduce<Record<string, number>>((acc, request) => {
+      const url = new URL(request.url());
+      const key = `${request.method()} ${url.origin}${url.pathname}`;
+      acc[key] = (acc[key] ?? 0) + 1;
       return acc;
     }, {});
 
-    for (const duplicateCount of Object.values(submissionCounts)) {
+    for (const [endpoint, count] of Object.entries(submissionCounts)) {
+      expect(count, `Expected a single submission for endpoint ${endpoint}`).toBe(1);
+    }
+
+    const duplicateStableBusinessPayloads = submissions.reduce<Record<string, number>>((acc, signature) => {
+      const normalizedSignature = signature
+        .replace(/\"(applicationId|sessionId|id|timestamp)\":\"[^\"]+\"/g, '')
+        .replace(/(applicationId|sessionId|id|timestamp)=[^&\\s]+/g, '$1=');
+      acc[normalizedSignature] = (acc[normalizedSignature] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    for (const duplicateCount of Object.values(duplicateStableBusinessPayloads)) {
       expect(duplicateCount).toBe(1);
     }
   } finally {
@@ -215,8 +229,7 @@ test('The Coffee Break Scenario blocks progression on session timeout', async ({
       .poll(
         async () =>
           (await loanPage.sessionExpiredIndicators.first().isVisible().catch(() => false)) ||
-          (await loanPage.isContinueDisabled()) ||
-          (page.url() === beforeContinueUrl && (await loanPage.amountInput.isVisible().catch(() => false))),
+          ((page.url() === beforeContinueUrl) && (await loanPage.isContinueDisabled())),
         {
           message: 'Expected session expiration feedback or blocked progression after a mocked 401 /calculate response.',
         },
