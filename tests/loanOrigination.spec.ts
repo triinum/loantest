@@ -128,18 +128,8 @@ test('Accidental Double Click does not create duplicate API submissions', async 
   await loanPage.changeCalculatorAndWaitForCalculation(15000, 60);
 
   const submissions: string[] = [];
-  const onRequest = (request: Request) => {
-    if (request.url().includes('/calculate')) {
-      return;
-    }
-
-    if (!['POST', 'PUT', 'PATCH'].includes(request.method())) {
-      return;
-    }
-
-    submissions.push(`${request.method()} ${request.url()} ${request.postData() ?? ''}`);
-  };
-  page.on('request', onRequest);
+  const capturedRequests: Request[] = [];
+  const stopCapturing = await loanPage.captureApplicationSubmission(capturedRequests);
 
   try {
     const startUrl = page.url();
@@ -150,6 +140,10 @@ test('Accidental Double Click does not create duplicate API submissions', async 
     ]).catch(() => undefined);
     await page.waitForLoadState('networkidle').catch(() => undefined);
 
+    submissions.push(
+      ...capturedRequests.map((request) => `${request.method()} ${request.url()} ${request.postData() ?? ''}`),
+    );
+
     const submissionCounts = submissions.reduce<Record<string, number>>((acc, signature) => {
       acc[signature] = (acc[signature] ?? 0) + 1;
       return acc;
@@ -159,7 +153,7 @@ test('Accidental Double Click does not create duplicate API submissions', async 
       expect(duplicateCount).toBe(1);
     }
   } finally {
-    page.off('request', onRequest);
+    stopCapturing();
   }
 });
 

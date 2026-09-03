@@ -1,8 +1,5 @@
 import { expect, Locator, Page, Request, Response } from '@playwright/test';
 
-const DEFAULT_APPLICATION_URL =
-  'https://taotlus.bigbank.ee/?amount=5000&period=60&productName=SMALL_LOAN&loanPurpose=DAILY_SETTLEMENTS';
-
 export class LoanPage {
   readonly page: Page;
   readonly amountInput: Locator;
@@ -31,7 +28,7 @@ export class LoanPage {
   }
 
   async openApplication(): Promise<void> {
-    await this.page.goto(process.env.BASE_URL ?? DEFAULT_APPLICATION_URL, { waitUntil: 'domcontentloaded' });
+    await this.page.goto('', { waitUntil: 'domcontentloaded' });
     await this.page.waitForLoadState('networkidle').catch(() => undefined);
     await this.dismissCookiesIfVisible();
     await this.waitForCalculatorReady();
@@ -86,30 +83,36 @@ export class LoanPage {
     await this.fillPeriod(period);
   }
 
-  async waitForCalculation(options: { expectOk?: boolean; timeout?: number; startedAt?: number } = {}): Promise<Response> {
+  async waitForCalculation(
+    expectedValue: string | number,
+    options: { expectOk?: boolean; timeout?: number } = {},
+  ): Promise<Response> {
     const { expectOk = true, timeout = 15_000 } = options;
-    const startedAt = options.startedAt ?? Date.now();
-    const response = await this.page.waitForResponse(
+
+    const requestPromise = this.page.waitForRequest(
       (candidate) =>
         candidate.url().includes('/calculate') &&
-        candidate.request().method() !== 'OPTIONS' &&
-        candidate.request().timing().startTime >= startedAt,
+        candidate.method() !== 'OPTIONS' &&
+        `${candidate.url()} ${candidate.postData() ?? ''}`.includes(String(expectedValue)),
       { timeout },
     );
+    const request = await requestPromise;
+    const response = await request.response();
+
+    expect(response, 'Expected a /calculate response for the triggered request.').not.toBeNull();
 
     if (expectOk) {
-      expect(response.ok(), `Expected /calculate to succeed, got ${response.status()}`).toBeTruthy();
+      expect(response!.ok(), `Expected /calculate to succeed, got ${response!.status()}`).toBeTruthy();
     }
 
-    return response;
+    return response!;
   }
 
   async fillAmountAndWaitForCalculation(
     value: string | number,
     options: { expectOk?: boolean; timeout?: number } = {},
   ): Promise<Response> {
-    const startedAt = Date.now();
-    const calculation = this.waitForCalculation({ ...options, startedAt });
+    const calculation = this.waitForCalculation(value, options);
     await this.fillAmount(value);
     return calculation;
   }
@@ -118,8 +121,7 @@ export class LoanPage {
     value: string | number,
     options: { expectOk?: boolean; timeout?: number } = {},
   ): Promise<Response> {
-    const startedAt = Date.now();
-    const calculation = this.waitForCalculation({ ...options, startedAt });
+    const calculation = this.waitForCalculation(value, options);
     await this.fillPeriod(value);
     return calculation;
   }
