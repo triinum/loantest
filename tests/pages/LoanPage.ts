@@ -89,16 +89,17 @@ export class LoanPage {
     options: { expectOk?: boolean; timeout?: number } = {},
   ): Promise<Response> {
     const { expectOk = true, timeout = 15_000 } = options;
+    const matchesExpectedCalculationRequest = (candidate: Request) =>
+      candidate.url().includes('/calculate') &&
+      candidate.method() !== 'OPTIONS' &&
+      this.matchesFieldValue(candidate, fieldName, expectedValue);
 
-    const requestPromise = this.page.waitForRequest(
-      (candidate) =>
-        candidate.url().includes('/calculate') &&
-        candidate.method() !== 'OPTIONS' &&
-        this.matchesFieldValue(candidate, fieldName, expectedValue),
+    const requestPromise = this.page.waitForRequest(matchesExpectedCalculationRequest, { timeout });
+    const responsePromise = this.page.waitForResponse(
+      (candidate) => matchesExpectedCalculationRequest(candidate.request()),
       { timeout },
     );
-    const request = await requestPromise;
-    const response = await this.page.waitForResponse((candidate) => candidate.request() === request, { timeout });
+    const [, response] = await Promise.all([requestPromise, responsePromise]);
 
     if (expectOk) {
       expect(response.ok(), `Expected /calculate to succeed, got ${response.status()}`).toBeTruthy();

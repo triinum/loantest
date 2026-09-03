@@ -198,8 +198,10 @@ test('The Coffee Break Scenario blocks progression on session timeout', async ({
 
   await loanPage.openApplication();
 
-  const calculateResponse = await loanPage.fillAmountAndWaitForCalculation(9000, { expectOk: false });
-  expect(calculateResponse.status()).toBe(401);
+  const amountCalculateResponse = await loanPage.fillAmountAndWaitForCalculation(9000, { expectOk: false });
+  expect(amountCalculateResponse.status()).toBe(401);
+  const periodCalculateResponse = await loanPage.fillPeriodAndWaitForCalculation(72, { expectOk: false });
+  expect(periodCalculateResponse.status()).toBe(401);
 
   const blockedByDisabledButton = await loanPage.isContinueDisabled();
   const beforeContinueUrl = page.url();
