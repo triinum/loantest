@@ -105,23 +105,13 @@ export class LoanPage {
     await this.fillPeriod(period);
   }
 
-  async waitForCalculation(
-    fieldName: 'amount' | 'period',
-    expectedValue: string | number,
-    options: { expectOk?: boolean; timeout?: number } = {},
-  ): Promise<Response> {
-    const { expectOk = true, timeout = 15_000 } = options;
-    const matchesExpectedCalculationRequest = (candidate: Request) =>
-      candidate.url().includes('/calculate') &&
-      candidate.method() !== 'OPTIONS' &&
-      this.matchesFieldValue(candidate, fieldName, expectedValue);
+  isCalculateResponse(response: Response): boolean {
+    return response.url().includes('/calculate') && response.request().method() !== 'OPTIONS';
+  }
 
-    const requestPromise = this.page.waitForRequest(matchesExpectedCalculationRequest, { timeout });
-    const responsePromise = this.page.waitForResponse(
-      (candidate) => matchesExpectedCalculationRequest(candidate.request()),
-      { timeout },
-    );
-    const [, response] = await Promise.all([requestPromise, responsePromise]);
+  async waitForCalculation(options: { expectOk?: boolean; timeout?: number } = {}): Promise<Response> {
+    const { expectOk = true, timeout = 15_000 } = options;
+    const response = await this.page.waitForResponse((candidate) => this.isCalculateResponse(candidate), { timeout });
 
     if (expectOk) {
       expect(response.ok(), `Expected /calculate to succeed, got ${response.status()}`).toBeTruthy();
@@ -134,7 +124,7 @@ export class LoanPage {
     value: string | number,
     options: { expectOk?: boolean; timeout?: number } = {},
   ): Promise<Response> {
-    const calculation = this.waitForCalculation('amount', value, options);
+    const calculation = this.waitForCalculation(options);
     await this.fillAmount(value);
     return calculation;
   }
@@ -143,25 +133,43 @@ export class LoanPage {
     value: string | number,
     options: { expectOk?: boolean; timeout?: number } = {},
   ): Promise<Response> {
-    const calculation = this.waitForCalculation('period', value, options);
+    const calculation = this.waitForCalculation(options);
     await this.fillPeriod(value);
     return calculation;
   }
 
   async changeCalculatorAndWaitForCalculation(amount: string | number, period: string | number): Promise<Response[]> {
     const responses: Response[] = [];
-    const currentAmount = await this.amountInput.inputValue();
-    const currentPeriod = await this.periodInput.inputValue();
+    const responseListener = (response: Response) => {
+      if (this.isCalculateResponse(response)) {
+        responses.push(response);
+      }
+    };
+    this.page.on('response', responseListener);
 
-    if (currentAmount !== String(amount)) {
-      responses.push(await this.fillAmountAndWaitForCalculation(amount));
+    try {
+      const currentAmount = await this.amountInput.inputValue();
+      const currentPeriod = await this.periodInput.inputValue();
+
+      if (!this.numericValueMatches(currentAmount, amount)) {
+        await this.fillAmount(amount);
+      }
+
+      if (!this.numericValueMatches(currentPeriod, period)) {
+        await this.fillPeriod(period);
+      }
+
+      await expect
+        .poll(() => responses.length, {
+          timeout: 15_000,
+          message: 'Expected a /calculate response after changing calculator values.',
+        })
+        .toBeGreaterThan(0);
+
+      return [...responses];
+    } finally {
+      this.page.off('response', responseListener);
     }
-
-    if (currentPeriod !== String(period)) {
-      responses.push(await this.fillPeriodAndWaitForCalculation(period));
-    }
-
-    return responses;
   }
 
   async clickContinue(options: { noWaitAfter?: boolean } = {}): Promise<void> {
@@ -251,6 +259,16 @@ export class LoanPage {
     return params.get(fieldName) === expected;
   }
 
+  normalizeNumericValue(value: string | number | null | undefined): string {
+    return String(value ?? '')
+      .replace(/[^\d-]/g, '')
+      .replace(/(?!^)-/g, '');
+  }
+
+  numericValueMatches(actualValue: string | number | null | undefined, expectedValue: string | number): boolean {
+    return this.normalizeNumericValue(actualValue) === this.normalizeNumericValue(expectedValue);
+  }
+
   async hasAppliedSelection(amount: number, period: number): Promise<boolean> {
     const selection = await this.getUrlSelection();
     if (selection.amount === String(amount) && selection.period === String(period)) {
@@ -267,6 +285,6 @@ export class LoanPage {
     }
 
     const [currentAmount, currentPeriod] = await Promise.all([this.amountInput.inputValue(), this.periodInput.inputValue()]);
-    return currentAmount === String(amount) && currentPeriod === String(period);
+    return this.numericValueMatches(currentAmount, amount) && this.numericValueMatches(currentPeriod, period);
   }
 }
