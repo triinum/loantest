@@ -28,10 +28,20 @@ export class LoanPage {
   }
 
   async openApplication(): Promise<void> {
-    await this.page.goto('', { waitUntil: 'domcontentloaded' });
-    await this.page.waitForLoadState('networkidle').catch(() => undefined);
-    await this.dismissCookiesIfVisible();
-    await this.waitForCalculatorReady();
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      await this.page.goto('', { waitUntil: 'domcontentloaded' });
+      await this.page.waitForLoadState('networkidle').catch(() => undefined);
+      await this.dismissCookiesIfVisible();
+
+      try {
+        await this.waitForCalculatorReady(attempt === 1 ? 15_000 : 25_000);
+        return;
+      } catch (error) {
+        if (attempt === 2) {
+          throw error;
+        }
+      }
+    }
   }
 
   async dismissCookiesIfVisible(): Promise<void> {

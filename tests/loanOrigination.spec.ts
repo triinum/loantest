@@ -2,7 +2,7 @@ import { expect, test, type Request } from '@playwright/test';
 import { HAPPY_CASES, NON_HAPPY_CASES } from './data/calculatorData';
 import { LoanPage } from './pages/LoanPage';
 
-test.describe.configure({ mode: 'parallel' });
+test.describe.configure({ mode: 'serial' });
 
 const DOM_CONTENT_LOADED_BUDGET_MS = 8_000;
 
