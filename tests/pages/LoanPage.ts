@@ -201,6 +201,22 @@ export class LoanPage {
     return this.page.locator('body').innerText();
   }
 
+  async readCalculatorSnapshot(): Promise<{
+    amount: string;
+    period: string;
+    monthlyPayment: string;
+    aprc: string;
+  }> {
+    const [amount, period, monthlyPayment, aprc] = await Promise.all([
+      this.amountInput.inputValue(),
+      this.periodInput.inputValue(),
+      this.readMetricText('monthlyPayment'),
+      this.readMetricText('aprc'),
+    ]);
+
+    return { amount, period, monthlyPayment, aprc };
+  }
+
   async getUrlSelection(): Promise<{ amount: string | null; period: string | null }> {
     const current = new URL(this.page.url());
     return {
@@ -248,6 +264,34 @@ export class LoanPage {
 
   numericValueMatches(actualValue: string | number | null | undefined, expectedValue: string | number): boolean {
     return this.normalizeNumericValue(actualValue) === this.normalizeNumericValue(expectedValue);
+  }
+
+  async waitForVisibleCalculatorUpdate(
+    amount: string | number,
+    period: string | number,
+    previous?: { monthlyPayment?: string; aprc?: string },
+    timeout = 15_000,
+  ): Promise<void> {
+    await expect
+      .poll(
+        async () => {
+          const snapshot = await this.readCalculatorSnapshot();
+          const amountMatches = this.numericValueMatches(snapshot.amount, amount);
+          const periodMatches = this.numericValueMatches(snapshot.period, period);
+          const metricsVisible = snapshot.monthlyPayment !== '' && snapshot.aprc !== '';
+          const metricsChanged =
+            !previous ||
+            snapshot.monthlyPayment !== (previous.monthlyPayment ?? '') ||
+            snapshot.aprc !== (previous.aprc ?? '');
+
+          return amountMatches && periodMatches && metricsVisible && metricsChanged;
+        },
+        {
+          timeout,
+          message: 'Expected visible calculator values to update after editing the loan inputs.',
+        },
+      )
+      .toBeTruthy();
   }
 
   async hasAppliedSelection(amount: number, period: number): Promise<boolean> {
