@@ -2,7 +2,7 @@ import { expect, test, type Request } from '@playwright/test';
 import { HAPPY_CASES, NON_HAPPY_CASES } from './data/calculatorData';
 import { LoanPage } from './pages/LoanPage';
 
-test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: 'parallel' });
 
 const DOM_CONTENT_LOADED_BUDGET_MS = 8_000;
 
@@ -10,6 +10,7 @@ test('UI renders within a basic performance budget and exposes accessible primar
   const loanPage = new LoanPage(page);
   await loanPage.openApplication();
 
+  await loanPage.waitForContinueReady();
   await expect(loanPage.continueButton).toHaveAccessibleName(/jätka/i);
   await expect(loanPage.amountInput).toBeEditable();
   await expect(loanPage.periodInput).toBeEditable();
@@ -94,6 +95,7 @@ for (const scenario of HAPPY_CASES) {
 
       expect(submissions).toHaveLength(0);
 
+      await loanPage.waitForContinueReady();
       await loanPage.clickContinue();
 
       await expect
@@ -133,7 +135,7 @@ for (const scenario of NON_HAPPY_CASES) {
 
     await expect(loanPage.amountInput).toBeVisible();
     await expect(loanPage.periodInput).toBeVisible();
-    await expect(loanPage.continueButton).toBeVisible();
+    await loanPage.waitForContinueReady();
 
     const activeInput = scenario.field === 'amount' ? loanPage.amountInput : loanPage.periodInput;
     const renderedValue = await activeInput.inputValue();
@@ -152,6 +154,7 @@ test('Accidental Double Click does not create duplicate API submissions', async 
   const loanPage = new LoanPage(page);
   await loanPage.openApplication();
   await loanPage.changeCalculatorAndWaitForCalculation(15000, 60);
+  await loanPage.waitForContinueReady();
 
   const submissions: string[] = [];
   const capturedRequests: Request[] = [];
@@ -203,6 +206,7 @@ test('The Coffee Break Scenario blocks progression on session timeout', async ({
   const loanPage = new LoanPage(page);
   const calculateEndpointPattern = /\/calculate(?:\?|$)/;
   await loanPage.openApplication();
+  await loanPage.waitForContinueReady();
   await page.route(calculateEndpointPattern, async (route) => {
     await route.fulfill({
       status: 401,

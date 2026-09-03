@@ -13,10 +13,20 @@ export class LoanPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.amountInput = page.locator('input[name="amount"]').first();
-    this.periodInput = page.locator('input[name="period"]').first();
+    this.amountInput = page
+      .locator(
+        'input[name="amount"], input[id*="amount" i], input[aria-label*="summa" i], input[placeholder*="summa" i]',
+      )
+      .first();
+    this.periodInput = page
+      .locator(
+        'input[name="period"], input[id*="period" i], input[id*="periood" i], input[aria-label*="period" i], input[aria-label*="periood" i]',
+      )
+      .first();
     this.continueButton = page
-      .locator('button:has-text("Jätka"), [role="button"]:has-text("Jätka"), input[type="submit"][value="Jätka"]')
+      .locator(
+        'button:has-text("Jätka"), [role="button"]:has-text("Jätka"), input[type="submit"][value="Jätka"], button[type="submit"], input[type="submit"]',
+      )
       .first();
     this.cookieConsentButton = page.locator('button:has-text("Nõustun"), [role="button"]:has-text("Nõustun")').first();
     this.monthlyPaymentSummary = page.getByText(/kuumakse|monthly payment/i).first();
@@ -56,13 +66,12 @@ export class LoanPage {
       .poll(
         async () => {
           await this.dismissCookiesIfVisible();
-          const [amountVisible, periodVisible, continueVisible] = await Promise.all([
+          const [amountVisible, periodVisible] = await Promise.all([
             this.amountInput.isVisible().catch(() => false),
             this.periodInput.isVisible().catch(() => false),
-            this.continueButton.isVisible().catch(() => false),
           ]);
 
-          return amountVisible && periodVisible && continueVisible;
+          return amountVisible && periodVisible;
         },
         {
           timeout,
@@ -73,6 +82,9 @@ export class LoanPage {
 
     await expect(this.amountInput).toBeVisible();
     await expect(this.periodInput).toBeVisible();
+  }
+
+  async waitForContinueReady(timeout = 15_000): Promise<void> {
     await expect(this.continueButton).toBeVisible();
   }
 
@@ -153,6 +165,7 @@ export class LoanPage {
   }
 
   async clickContinue(options: { noWaitAfter?: boolean } = {}): Promise<void> {
+    await this.waitForContinueReady();
     await this.continueButton.click(options);
   }
 
