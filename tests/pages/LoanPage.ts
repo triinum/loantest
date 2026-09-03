@@ -105,8 +105,12 @@ export class LoanPage {
     await this.fillPeriod(period);
   }
 
+  isCalculateRequest(request: Request): boolean {
+    return /\/calculate(?:\?|$)/.test(request.url()) && request.method() !== 'OPTIONS';
+  }
+
   isCalculateResponse(response: Response): boolean {
-    return response.url().includes('/calculate') && response.request().method() !== 'OPTIONS';
+    return this.isCalculateRequest(response.request());
   }
 
   async waitForCalculation(options: { expectOk?: boolean; timeout?: number } = {}): Promise<Response> {
@@ -150,13 +154,20 @@ export class LoanPage {
     try {
       const currentAmount = await this.amountInput.inputValue();
       const currentPeriod = await this.periodInput.inputValue();
+      let changed = false;
 
       if (!this.numericValueMatches(currentAmount, amount)) {
         await this.fillAmount(amount);
+        changed = true;
       }
 
       if (!this.numericValueMatches(currentPeriod, period)) {
         await this.fillPeriod(period);
+        changed = true;
+      }
+
+      if (!changed) {
+        return [];
       }
 
       await expect
@@ -214,7 +225,7 @@ export class LoanPage {
 
   async captureApplicationSubmission(requests: Request[]): Promise<() => void> {
     const listener = (request: Request) => {
-      if (request.url().includes('/calculate')) {
+      if (this.isCalculateRequest(request)) {
         return;
       }
 
@@ -227,36 +238,6 @@ export class LoanPage {
 
     this.page.on('request', listener);
     return () => this.page.off('request', listener);
-  }
-
-  matchesFieldValue(request: Request, fieldName: 'amount' | 'period', expectedValue: string | number): boolean {
-    const expected = String(expectedValue);
-
-    try {
-      const requestUrl = new URL(request.url());
-      if (requestUrl.searchParams.get(fieldName) === expected) {
-        return true;
-      }
-    } catch {
-      // Ignore malformed URLs and continue with payload parsing.
-    }
-
-    const payload = request.postData();
-    if (!payload) {
-      return false;
-    }
-
-    try {
-      const json = JSON.parse(payload) as Record<string, unknown>;
-      if (String(json[fieldName] ?? '') === expected) {
-        return true;
-      }
-    } catch {
-      // Ignore non-JSON payloads and continue with form parsing.
-    }
-
-    const params = new URLSearchParams(payload);
-    return params.get(fieldName) === expected;
   }
 
   normalizeNumericValue(value: string | number | null | undefined): string {
