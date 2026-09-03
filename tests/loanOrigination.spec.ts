@@ -187,8 +187,9 @@ test('Accidental Double Click does not create duplicate API submissions', async 
 
 test('The Coffee Break Scenario blocks progression on session timeout', async ({ page }) => {
   const loanPage = new LoanPage(page);
+  const calculateEndpointPattern = /\/calculate(?:\?|$)/;
   await loanPage.openApplication();
-  await page.route('**/*calculate*', async (route) => {
+  await page.route(calculateEndpointPattern, async (route) => {
     await route.fulfill({
       status: 401,
       contentType: 'application/json',
@@ -222,6 +223,6 @@ test('The Coffee Break Scenario blocks progression on session timeout', async ({
       )
       .toBeTruthy();
   } finally {
-    await page.unroute('**/*calculate*');
+    await page.unroute(calculateEndpointPattern);
   }
 });
