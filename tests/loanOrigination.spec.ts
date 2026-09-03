@@ -31,6 +31,8 @@ for (const scenario of HAPPY_CASES) {
     await loanPage.openApplication();
 
     const beforeText = await loanPage.readVisibleText();
+    const beforePayment = await loanPage.readMetricText('monthlyPayment');
+    const beforeAprc = await loanPage.readMetricText('aprc');
     const beforeSelection = await loanPage.getUrlSelection();
     const submissions: Request[] = [];
     const stopCapturing = await loanPage.captureApplicationSubmission(submissions);
@@ -43,7 +45,14 @@ for (const scenario of HAPPY_CASES) {
     await expect(loanPage.aprcSummary).toBeVisible();
 
     const afterText = await loanPage.readVisibleText();
+    const afterPayment = await loanPage.readMetricText('monthlyPayment');
+    const afterAprc = await loanPage.readMetricText('aprc');
     expect(afterText).not.toEqual(beforeText);
+    expect(afterPayment).not.toEqual('');
+    expect(afterAprc).not.toEqual('');
+    if (beforeSelection.amount !== String(scenario.amount) || beforeSelection.period !== String(scenario.period)) {
+      expect(`${afterPayment}|${afterAprc}`).not.toEqual(`${beforePayment}|${beforeAprc}`);
+    }
 
     const requestSnapshots = calculateResponses.map(
       (response) => `${response.request().url()} ${response.request().postData() ?? ''}`,
@@ -130,9 +139,13 @@ test('Accidental Double Click does not create duplicate API submissions', async 
     submissions.push(`${request.method()} ${request.url()} ${request.postData() ?? ''}`);
   });
 
+  const startUrl = page.url();
   await loanPage.continueButton.dblclick({ delay: 20 });
+  await Promise.race([
+    page.waitForURL((url) => url.toString() !== startUrl, { timeout: 5_000 }),
+    page.waitForLoadState('networkidle'),
+  ]).catch(() => undefined);
   await page.waitForLoadState('networkidle').catch(() => undefined);
-  await page.waitForTimeout(1_000);
 
   const submissionCounts = submissions.reduce<Record<string, number>>((acc, signature) => {
     acc[signature] = (acc[signature] ?? 0) + 1;
@@ -157,24 +170,26 @@ test('The Coffee Break Scenario blocks progression on session timeout', async ({
 
   await loanPage.openApplication();
 
-  const calculateResponse = page.waitForResponse(
-    (response) => response.url().includes('/calculate') && response.status() === 401,
-  );
-
-  await loanPage.fillAmount(9000);
-  await calculateResponse;
+  const calculateResponse = await loanPage.fillAmountAndWaitForCalculation(9000, { expectOk: false });
+  expect(calculateResponse.status()).toBe(401);
 
   const blockedByDisabledButton = await loanPage.isContinueDisabled();
-  const sessionIndicatorVisible = await loanPage.sessionExpiredIndicators.first().isVisible().catch(() => false);
   const beforeContinueUrl = page.url();
 
   if (!blockedByDisabledButton) {
     await loanPage.clickContinue({ noWaitAfter: true });
-    await page.waitForTimeout(500);
+    await page.waitForLoadState('networkidle').catch(() => undefined);
   }
 
-  expect(
-    sessionIndicatorVisible || blockedByDisabledButton || page.url() === beforeContinueUrl,
-    'Expected session expiration feedback or blocked progression after a mocked 401 /calculate response.',
-  ).toBeTruthy();
+  await expect
+    .poll(
+      async () =>
+        (await loanPage.sessionExpiredIndicators.first().isVisible().catch(() => false)) ||
+        (await loanPage.isContinueDisabled()) ||
+        (page.url() === beforeContinueUrl && (await loanPage.amountInput.isVisible().catch(() => false))),
+      {
+        message: 'Expected session expiration feedback or blocked progression after a mocked 401 /calculate response.',
+      },
+    )
+    .toBeTruthy();
 });
