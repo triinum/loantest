@@ -97,15 +97,13 @@ export class LoanPage {
       { timeout },
     );
     const request = await requestPromise;
-    const response = await request.response();
-
-    expect(response, 'Expected a /calculate response for the triggered request.').not.toBeNull();
+    const response = await this.page.waitForResponse((candidate) => candidate.request() === request, { timeout });
 
     if (expectOk) {
-      expect(response!.ok(), `Expected /calculate to succeed, got ${response!.status()}`).toBeTruthy();
+      expect(response.ok(), `Expected /calculate to succeed, got ${response.status()}`).toBeTruthy();
     }
 
-    return response!;
+    return response;
   }
 
   async fillAmountAndWaitForCalculation(
@@ -133,14 +131,10 @@ export class LoanPage {
 
     if (currentAmount !== String(amount)) {
       responses.push(await this.fillAmountAndWaitForCalculation(amount));
-    } else {
-      await this.fillAmount(amount);
     }
 
     if (currentPeriod !== String(period)) {
       responses.push(await this.fillPeriodAndWaitForCalculation(period));
-    } else {
-      await this.fillPeriod(period);
     }
 
     return responses;

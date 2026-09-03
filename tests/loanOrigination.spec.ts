@@ -25,6 +25,34 @@ test('UI renders within a basic performance budget and exposes accessible primar
   expect(domContentLoaded).toBeLessThan(DOM_CONTENT_LOADED_BUDGET_MS);
 });
 
+test('captureApplicationSubmission ignores calculate and GET requests', async ({ page }) => {
+  const loanPage = new LoanPage(page);
+  const capturedRequests: Request[] = [];
+  const stopCapturing = await loanPage.captureApplicationSubmission(capturedRequests);
+
+  await page.route('https://example.test/**', async (route) => {
+    await route.fulfill({ status: 200, body: 'ok' });
+  });
+
+  try {
+    await page.goto('data:text/html,<html><body>capture test</body></html>');
+    await page.evaluate(async () => {
+      await Promise.all([
+        fetch('https://example.test/calculate', { method: 'POST' }),
+        fetch('https://example.test/apply', { method: 'POST' }),
+        fetch('https://example.test/read', { method: 'GET' }),
+      ]);
+    });
+
+    await expect.poll(() => capturedRequests.length).toBe(1);
+    expect(capturedRequests[0].method()).toBe('POST');
+    expect(capturedRequests[0].url()).toContain('/apply');
+  } finally {
+    stopCapturing();
+    await page.unroute('https://example.test/**');
+  }
+});
+
 for (const scenario of HAPPY_CASES) {
   test(`Happy path: ${scenario.name}`, async ({ page }) => {
     const loanPage = new LoanPage(page);
@@ -143,6 +171,7 @@ test('Accidental Double Click does not create duplicate API submissions', async 
     submissions.push(
       ...capturedRequests.map((request) => `${request.method()} ${request.url()} ${request.postData() ?? ''}`),
     );
+    expect(submissions.length).toBeGreaterThan(0);
 
     const submissionCounts = submissions.reduce<Record<string, number>>((acc, signature) => {
       acc[signature] = (acc[signature] ?? 0) + 1;
