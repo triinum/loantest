@@ -1,0 +1,113 @@
+name: Playwright E2E
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+  workflow_dispatch:
+  projects_v2_item:
+    types:
+      - edited
+
+permissions:
+  contents: read
+
+concurrency:
+  group: playwright-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  trigger-check:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.decide.outputs.should_run }}
+    steps:
+      - name: Decide whether to run the pipeline
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action || '' }}
+          CHANGED_FIELD: ${{ github.event.changes.field_value.field_name || '' }}
+          NEW_STATUS: ${{ github.event.changes.field_value.to.name || '' }}
+        run: |
+          should_run=false
+
+          if [ "$EVENT_NAME" != "projects_v2_item" ]; then
+            should_run=true
+          elif [ "$EVENT_ACTION" = "edited" ] && [ "$CHANGED_FIELD" = "Status" ]; then
+            normalized_status=$(printf '%s' "$NEW_STATUS" | tr '[:upper:]' '[:lower:]')
+            if [ "$normalized_status" = "testing" ] || [ "$normalized_status" = "in testing" ]; then
+              should_run=true
+            fi
+          fi
+
+          echo "should_run=$should_run" >> "$GITHUB_OUTPUT"
+
+  test-stage:
+    needs: trigger-check
+    if: needs.trigger-check.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run default Playwright suite
+        run: npm test
+        env:
+          BASE_URL: https://taotlus.bigbank.ee/?amount=5000&period=60&productName=SMALL_LOAN&loanPurpose=DAILY_SETTLEMENTS
+
+      - name: Upload HTML report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-test-stage
+          path: playwright-report/
+          if-no-files-found: ignore
+
+  uat-stage:
+    needs:
+      - trigger-check
+      - test-stage
+    if: needs.trigger-check.outputs.should_run == 'true' && needs.test-stage.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run UAT Playwright suite
+        run: npm test
+        env:
+          BASE_URL: ${{ vars.UAT_BASE_URL || 'https://uat.taotlus.bigbank.ee/?amount=5000&period=60&productName=SMALL_LOAN&loanPurpose=DAILY_SETTLEMENTS' }}
+
+      - name: Upload HTML report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-uat-stage
+          path: playwright-report/
+          if-no-files-found: ignore
