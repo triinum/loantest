@@ -187,7 +187,7 @@ test('Accidental Double Click does not create duplicate API submissions', async 
 
 test('The Coffee Break Scenario blocks progression on session timeout', async ({ page }) => {
   const loanPage = new LoanPage(page);
-
+  await loanPage.openApplication();
   await page.route('**/*calculate*', async (route) => {
     await route.fulfill({
       status: 401,
@@ -196,30 +196,32 @@ test('The Coffee Break Scenario blocks progression on session timeout', async ({
     });
   });
 
-  await loanPage.openApplication();
+  try {
+    const amountCalculateResponse = await loanPage.fillAmountAndWaitForCalculation(9000, { expectOk: false });
+    expect(amountCalculateResponse.status()).toBe(401);
+    const periodCalculateResponse = await loanPage.fillPeriodAndWaitForCalculation(72, { expectOk: false });
+    expect(periodCalculateResponse.status()).toBe(401);
 
-  const amountCalculateResponse = await loanPage.fillAmountAndWaitForCalculation(9000, { expectOk: false });
-  expect(amountCalculateResponse.status()).toBe(401);
-  const periodCalculateResponse = await loanPage.fillPeriodAndWaitForCalculation(72, { expectOk: false });
-  expect(periodCalculateResponse.status()).toBe(401);
+    const blockedByDisabledButton = await loanPage.isContinueDisabled();
+    const beforeContinueUrl = page.url();
 
-  const blockedByDisabledButton = await loanPage.isContinueDisabled();
-  const beforeContinueUrl = page.url();
+    if (!blockedByDisabledButton) {
+      await loanPage.clickContinue({ noWaitAfter: true });
+      await page.waitForLoadState('networkidle').catch(() => undefined);
+    }
 
-  if (!blockedByDisabledButton) {
-    await loanPage.clickContinue({ noWaitAfter: true });
-    await page.waitForLoadState('networkidle').catch(() => undefined);
+    await expect
+      .poll(
+        async () =>
+          (await loanPage.sessionExpiredIndicators.first().isVisible().catch(() => false)) ||
+          (await loanPage.isContinueDisabled()) ||
+          (page.url() === beforeContinueUrl && (await loanPage.amountInput.isVisible().catch(() => false))),
+        {
+          message: 'Expected session expiration feedback or blocked progression after a mocked 401 /calculate response.',
+        },
+      )
+      .toBeTruthy();
+  } finally {
+    await page.unroute('**/*calculate*');
   }
-
-  await expect
-    .poll(
-      async () =>
-        (await loanPage.sessionExpiredIndicators.first().isVisible().catch(() => false)) ||
-        (await loanPage.isContinueDisabled()) ||
-        (page.url() === beforeContinueUrl && (await loanPage.amountInput.isVisible().catch(() => false))),
-      {
-        message: 'Expected session expiration feedback or blocked progression after a mocked 401 /calculate response.',
-      },
-    )
-    .toBeTruthy();
 });
