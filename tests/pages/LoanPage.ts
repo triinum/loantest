@@ -86,10 +86,14 @@ export class LoanPage {
     await this.fillPeriod(period);
   }
 
-  async waitForCalculation(options: { expectOk?: boolean; timeout?: number } = {}): Promise<Response> {
+  async waitForCalculation(options: { expectOk?: boolean; timeout?: number; startedAt?: number } = {}): Promise<Response> {
     const { expectOk = true, timeout = 15_000 } = options;
+    const startedAt = options.startedAt ?? Date.now();
     const response = await this.page.waitForResponse(
-      (candidate) => candidate.url().includes('/calculate') && candidate.request().method() !== 'OPTIONS',
+      (candidate) =>
+        candidate.url().includes('/calculate') &&
+        candidate.request().method() !== 'OPTIONS' &&
+        candidate.request().timing().startTime >= startedAt,
       { timeout },
     );
 
@@ -104,7 +108,8 @@ export class LoanPage {
     value: string | number,
     options: { expectOk?: boolean; timeout?: number } = {},
   ): Promise<Response> {
-    const calculation = this.waitForCalculation(options);
+    const startedAt = Date.now();
+    const calculation = this.waitForCalculation({ ...options, startedAt });
     await this.fillAmount(value);
     return calculation;
   }
@@ -113,7 +118,8 @@ export class LoanPage {
     value: string | number,
     options: { expectOk?: boolean; timeout?: number } = {},
   ): Promise<Response> {
-    const calculation = this.waitForCalculation(options);
+    const startedAt = Date.now();
+    const calculation = this.waitForCalculation({ ...options, startedAt });
     await this.fillPeriod(value);
     return calculation;
   }

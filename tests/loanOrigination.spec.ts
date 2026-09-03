@@ -36,55 +36,56 @@ for (const scenario of HAPPY_CASES) {
     const beforeSelection = await loanPage.getUrlSelection();
     const submissions: Request[] = [];
     const stopCapturing = await loanPage.captureApplicationSubmission(submissions);
+    try {
+      const calculateResponses = await loanPage.changeCalculatorAndWaitForCalculation(scenario.amount, scenario.period);
 
-    const calculateResponses = await loanPage.changeCalculatorAndWaitForCalculation(scenario.amount, scenario.period);
+      await expect(loanPage.amountInput).toHaveValue(String(scenario.amount));
+      await expect(loanPage.periodInput).toHaveValue(String(scenario.period));
+      await expect(loanPage.monthlyPaymentSummary).toBeVisible();
+      await expect(loanPage.aprcSummary).toBeVisible();
 
-    await expect(loanPage.amountInput).toHaveValue(String(scenario.amount));
-    await expect(loanPage.periodInput).toHaveValue(String(scenario.period));
-    await expect(loanPage.monthlyPaymentSummary).toBeVisible();
-    await expect(loanPage.aprcSummary).toBeVisible();
+      const afterText = await loanPage.readVisibleText();
+      const afterPayment = await loanPage.readMetricText('monthlyPayment');
+      const afterAprc = await loanPage.readMetricText('aprc');
+      expect(afterText).not.toEqual(beforeText);
+      expect(afterPayment).not.toEqual('');
+      expect(afterAprc).not.toEqual('');
+      if (beforeSelection.amount !== String(scenario.amount) || beforeSelection.period !== String(scenario.period)) {
+        expect(`${afterPayment}|${afterAprc}`).not.toEqual(`${beforePayment}|${beforeAprc}`);
+      }
 
-    const afterText = await loanPage.readVisibleText();
-    const afterPayment = await loanPage.readMetricText('monthlyPayment');
-    const afterAprc = await loanPage.readMetricText('aprc');
-    expect(afterText).not.toEqual(beforeText);
-    expect(afterPayment).not.toEqual('');
-    expect(afterAprc).not.toEqual('');
-    if (beforeSelection.amount !== String(scenario.amount) || beforeSelection.period !== String(scenario.period)) {
-      expect(`${afterPayment}|${afterAprc}`).not.toEqual(`${beforePayment}|${beforeAprc}`);
+      const requestSnapshots = calculateResponses.map(
+        (response) => `${response.request().url()} ${response.request().postData() ?? ''}`,
+      );
+      if (beforeSelection.amount !== String(scenario.amount)) {
+        expect(requestSnapshots.some((snapshot) => snapshot.includes(String(scenario.amount)))).toBeTruthy();
+      }
+      if (beforeSelection.period !== String(scenario.period)) {
+        expect(requestSnapshots.some((snapshot) => snapshot.includes(String(scenario.period)))).toBeTruthy();
+      }
+
+      const draftSelection = await loanPage.getUrlSelection();
+      expect(draftSelection).toEqual(beforeSelection);
+      expect(submissions).toHaveLength(0);
+
+      await loanPage.clickContinue();
+
+      await expect
+        .poll(async () => loanPage.hasAppliedSelection(scenario.amount, scenario.period), {
+          message: 'Expected chosen amount and period to be applied after clicking Jätka',
+        })
+        .toBeTruthy();
+
+      const signatures = submissions.map(
+        (request) => `${request.method()} ${request.url()} ${request.postData() ?? ''}`,
+      );
+      if (signatures.length > 0) {
+        expect(signatures.some((signature) => signature.includes(String(scenario.amount)))).toBeTruthy();
+        expect(signatures.some((signature) => signature.includes(String(scenario.period)))).toBeTruthy();
+      }
+    } finally {
+      stopCapturing();
     }
-
-    const requestSnapshots = calculateResponses.map(
-      (response) => `${response.request().url()} ${response.request().postData() ?? ''}`,
-    );
-    if (beforeSelection.amount !== String(scenario.amount)) {
-      expect(requestSnapshots.some((snapshot) => snapshot.includes(String(scenario.amount)))).toBeTruthy();
-    }
-    if (beforeSelection.period !== String(scenario.period)) {
-      expect(requestSnapshots.some((snapshot) => snapshot.includes(String(scenario.period)))).toBeTruthy();
-    }
-
-    const draftSelection = await loanPage.getUrlSelection();
-    expect(draftSelection).toEqual(beforeSelection);
-    expect(submissions).toHaveLength(0);
-
-    await loanPage.clickContinue();
-
-    await expect
-      .poll(async () => loanPage.hasAppliedSelection(scenario.amount, scenario.period), {
-        message: 'Expected chosen amount and period to be applied after clicking Jätka',
-      })
-      .toBeTruthy();
-
-    const signatures = submissions.map(
-      (request) => `${request.method()} ${request.url()} ${request.postData() ?? ''}`,
-    );
-    if (signatures.length > 0) {
-      expect(signatures.some((signature) => signature.includes(String(scenario.amount)))).toBeTruthy();
-      expect(signatures.some((signature) => signature.includes(String(scenario.period)))).toBeTruthy();
-    }
-
-    stopCapturing();
   });
 }
 
@@ -127,7 +128,7 @@ test('Accidental Double Click does not create duplicate API submissions', async 
   await loanPage.changeCalculatorAndWaitForCalculation(15000, 60);
 
   const submissions: string[] = [];
-  page.on('request', (request) => {
+  const onRequest = (request: Request) => {
     if (request.url().includes('/calculate')) {
       return;
     }
@@ -137,23 +138,28 @@ test('Accidental Double Click does not create duplicate API submissions', async 
     }
 
     submissions.push(`${request.method()} ${request.url()} ${request.postData() ?? ''}`);
-  });
+  };
+  page.on('request', onRequest);
 
-  const startUrl = page.url();
-  await loanPage.continueButton.dblclick({ delay: 20 });
-  await Promise.race([
-    page.waitForURL((url) => url.toString() !== startUrl, { timeout: 5_000 }),
-    page.waitForLoadState('networkidle'),
-  ]).catch(() => undefined);
-  await page.waitForLoadState('networkidle').catch(() => undefined);
+  try {
+    const startUrl = page.url();
+    await loanPage.continueButton.dblclick({ delay: 20 });
+    await Promise.race([
+      page.waitForURL((url) => url.toString() !== startUrl, { timeout: 5_000 }),
+      page.waitForLoadState('networkidle'),
+    ]).catch(() => undefined);
+    await page.waitForLoadState('networkidle').catch(() => undefined);
 
-  const submissionCounts = submissions.reduce<Record<string, number>>((acc, signature) => {
-    acc[signature] = (acc[signature] ?? 0) + 1;
-    return acc;
-  }, {});
+    const submissionCounts = submissions.reduce<Record<string, number>>((acc, signature) => {
+      acc[signature] = (acc[signature] ?? 0) + 1;
+      return acc;
+    }, {});
 
-  for (const duplicateCount of Object.values(submissionCounts)) {
-    expect(duplicateCount).toBe(1);
+    for (const duplicateCount of Object.values(submissionCounts)) {
+      expect(duplicateCount).toBe(1);
+    }
+  } finally {
+    page.off('request', onRequest);
   }
 });
 
