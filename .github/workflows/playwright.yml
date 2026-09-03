@@ -9,6 +9,9 @@ on:
       - 'copilot/**'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   test-stage:
     runs-on: ubuntu-latest
