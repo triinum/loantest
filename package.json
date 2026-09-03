@@ -1,0 +1,21 @@
+{
+  "name": "loantest",
+  "version": "1.0.0",
+  "description": "Playwright + TypeScript E2E coverage for the Bigbank loan calculator and origination flow",
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://localhost:26831/triinum/loantest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  },
+  "private": true
+}
