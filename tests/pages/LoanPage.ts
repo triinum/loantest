@@ -5,6 +5,7 @@ const DEFAULT_APPLICATION_URL =
 
 export class LoanPage {
   readonly page: Page;
+  readonly calculatorRoot: Locator;
   readonly amountInput: Locator;
   readonly periodInput: Locator;
   readonly continueButton: Locator;
@@ -16,9 +17,12 @@ export class LoanPage {
 
   constructor(page: Page) {
     this.page = page;
+    this.calculatorRoot = page.locator('form').filter({ has: page.locator('input[name="amount"]') }).first();
     this.amountInput = page.locator('input[name="amount"]').first();
     this.periodInput = page.locator('input[name="period"]').first();
-    this.continueButton = page.locator('button:has-text("Jätka"), [role="button"]:has-text("Jätka")').first();
+    this.continueButton = page
+      .locator('button:has-text("Jätka"), [role="button"]:has-text("Jätka"), input[type="submit"][value="Jätka"]')
+      .first();
     this.cookieConsentButton = page.locator('button:has-text("Nõustun"), [role="button"]:has-text("Nõustun")').first();
     this.monthlyPaymentSummary = page.getByText(/kuumakse|monthly payment/i).first();
     this.aprcSummary = page.getByText(/aprc|kkm|annual percentage rate/i).first();
@@ -29,17 +33,43 @@ export class LoanPage {
   }
 
   async openApplication(): Promise<void> {
-    await this.page.goto(process.env.BASE_URL ?? DEFAULT_APPLICATION_URL, { waitUntil: 'networkidle' });
+    await this.page.goto(process.env.BASE_URL ?? DEFAULT_APPLICATION_URL, { waitUntil: 'domcontentloaded' });
+    await this.page.waitForLoadState('networkidle').catch(() => undefined);
     await this.dismissCookiesIfVisible();
-    await expect(this.amountInput).toBeVisible();
-    await expect(this.periodInput).toBeVisible();
-    await expect(this.continueButton).toBeVisible();
+    await this.waitForCalculatorReady();
   }
 
   async dismissCookiesIfVisible(): Promise<void> {
     if (await this.cookieConsentButton.isVisible().catch(() => false)) {
       await this.cookieConsentButton.click();
+      await this.page.waitForLoadState('networkidle').catch(() => undefined);
     }
+  }
+
+  async waitForCalculatorReady(timeout = 15_000): Promise<void> {
+    await expect
+      .poll(
+        async () => {
+          await this.dismissCookiesIfVisible();
+          const [rootVisible, amountVisible, periodVisible, continueVisible] = await Promise.all([
+            this.calculatorRoot.isVisible().catch(() => false),
+            this.amountInput.isVisible().catch(() => false),
+            this.periodInput.isVisible().catch(() => false),
+            this.continueButton.isVisible().catch(() => false),
+          ]);
+
+          return rootVisible || (amountVisible && periodVisible && continueVisible);
+        },
+        {
+          timeout,
+          message: 'Expected the loan calculator controls to be visible.',
+        },
+      )
+      .toBeTruthy();
+
+    await expect(this.amountInput).toBeVisible();
+    await expect(this.periodInput).toBeVisible();
+    await expect(this.continueButton).toBeVisible();
   }
 
   async fillAmount(value: string | number): Promise<void> {
