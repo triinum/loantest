@@ -269,7 +269,7 @@ export class LoanPage {
   async waitForVisibleCalculatorUpdate(
     amount: string | number,
     period: string | number,
-    previous?: { monthlyPayment?: string; aprc?: string },
+    previous?: { monthlyPayment?: string; aprc?: string; requireMetricChange?: boolean },
     timeout = 15_000,
   ): Promise<void> {
     await expect
@@ -283,8 +283,9 @@ export class LoanPage {
             !previous ||
             snapshot.monthlyPayment !== (previous.monthlyPayment ?? '') ||
             snapshot.aprc !== (previous.aprc ?? '');
+          const metricExpectationSatisfied = previous?.requireMetricChange ? metricsChanged : true;
 
-          return amountMatches && periodMatches && metricsVisible && metricsChanged;
+          return amountMatches && periodMatches && metricsVisible && metricExpectationSatisfied;
         },
         {
           timeout,

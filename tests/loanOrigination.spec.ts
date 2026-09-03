@@ -70,6 +70,8 @@ for (const scenario of HAPPY_CASES) {
       await loanPage.waitForVisibleCalculatorUpdate(scenario.amount, scenario.period, {
         monthlyPayment: beforePayment,
         aprc: beforeAprc,
+        requireMetricChange:
+          beforeSelection.amount !== String(scenario.amount) || beforeSelection.period !== String(scenario.period),
       });
 
       expect(await loanPage.numericValueMatches(await loanPage.amountInput.inputValue(), scenario.amount)).toBeTruthy();
@@ -138,11 +140,10 @@ for (const scenario of NON_HAPPY_CASES) {
     const normalizedChanged = !loanPage.numericValueMatches(renderedValue, scenario.value);
     const softInvalidInput =
       scenario.value.includes('.') || scenario.value !== scenario.value.trim() || /\d+[€#]/.test(scenario.value);
-    const uiStillUsable = (await loanPage.amountInput.isVisible()) && (await loanPage.periodInput.isVisible());
 
     expect(pageErrors).toHaveLength(0);
     expect(
-      normalizedChanged || validationTriggered || continueDisabled || softInvalidInput || uiStillUsable,
+      normalizedChanged || validationTriggered || continueDisabled || softInvalidInput,
       'Expected the UI to sanitize the invalid input or block continuation.',
     ).toBeTruthy();
   });
@@ -159,14 +160,8 @@ test('Accidental Double Click does not create duplicate API submissions', async 
   const stopCapturing = await loanPage.captureApplicationSubmission(capturedRequests);
 
   try {
-    const startUrl = page.url();
     await loanPage.continueButton.dblclick({ delay: 20 });
     await expect.poll(() => capturedRequests.length, { message: 'Expected at least one application submission request.' }).toBeGreaterThan(0);
-    await Promise.race([
-      page.waitForURL((url) => url.toString() !== startUrl, { timeout: 5_000 }),
-      page.waitForLoadState('networkidle'),
-    ]).catch(() => undefined);
-    await page.waitForLoadState('networkidle').catch(() => undefined);
     let lastSeenSubmissionCount = -1;
     await expect
       .poll(
