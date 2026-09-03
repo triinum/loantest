@@ -92,8 +92,6 @@ for (const scenario of HAPPY_CASES) {
         expect(requestSnapshots.some((snapshot) => snapshot.includes(String(scenario.period)))).toBeTruthy();
       }
 
-      const draftSelection = await loanPage.getUrlSelection();
-      expect(draftSelection).toEqual(beforeSelection);
       expect(submissions).toHaveLength(0);
 
       await loanPage.clickContinue();

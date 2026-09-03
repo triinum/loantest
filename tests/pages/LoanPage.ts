@@ -84,6 +84,7 @@ export class LoanPage {
   }
 
   async waitForCalculation(
+    fieldName: 'amount' | 'period',
     expectedValue: string | number,
     options: { expectOk?: boolean; timeout?: number } = {},
   ): Promise<Response> {
@@ -93,7 +94,7 @@ export class LoanPage {
       (candidate) =>
         candidate.url().includes('/calculate') &&
         candidate.method() !== 'OPTIONS' &&
-        `${candidate.url()} ${candidate.postData() ?? ''}`.includes(String(expectedValue)),
+        this.matchesFieldValue(candidate, fieldName, expectedValue),
       { timeout },
     );
     const request = await requestPromise;
@@ -110,7 +111,7 @@ export class LoanPage {
     value: string | number,
     options: { expectOk?: boolean; timeout?: number } = {},
   ): Promise<Response> {
-    const calculation = this.waitForCalculation(value, options);
+    const calculation = this.waitForCalculation('amount', value, options);
     await this.fillAmount(value);
     return calculation;
   }
@@ -119,7 +120,7 @@ export class LoanPage {
     value: string | number,
     options: { expectOk?: boolean; timeout?: number } = {},
   ): Promise<Response> {
-    const calculation = this.waitForCalculation(value, options);
+    const calculation = this.waitForCalculation('period', value, options);
     await this.fillPeriod(value);
     return calculation;
   }
@@ -194,6 +195,36 @@ export class LoanPage {
 
     this.page.on('request', listener);
     return () => this.page.off('request', listener);
+  }
+
+  matchesFieldValue(request: Request, fieldName: 'amount' | 'period', expectedValue: string | number): boolean {
+    const expected = String(expectedValue);
+
+    try {
+      const requestUrl = new URL(request.url());
+      if (requestUrl.searchParams.get(fieldName) === expected) {
+        return true;
+      }
+    } catch {
+      // Ignore malformed URLs and continue with payload parsing.
+    }
+
+    const payload = request.postData();
+    if (!payload) {
+      return false;
+    }
+
+    try {
+      const json = JSON.parse(payload) as Record<string, unknown>;
+      if (String(json[fieldName] ?? '') === expected) {
+        return true;
+      }
+    } catch {
+      // Ignore non-JSON payloads and continue with form parsing.
+    }
+
+    const params = new URLSearchParams(payload);
+    return params.get(fieldName) === expected;
   }
 
   async hasAppliedSelection(amount: number, period: number): Promise<boolean> {
