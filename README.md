@@ -82,7 +82,7 @@ Artifacts such as screenshots, video, and trace data are retained only for faile
 
 ## CI/CD pipeline
 
-The GitHub Actions workflow is defined in `/home/runner/work/loantest/loantest/.github/workflows/playwright.yml`.
+The GitHub Actions workflow is defined in `.github/workflows/playwright.yml`.
 
 It runs in these cases:
 

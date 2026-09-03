@@ -5,7 +5,6 @@ const DEFAULT_APPLICATION_URL =
 
 export class LoanPage {
   readonly page: Page;
-  readonly calculatorRoot: Locator;
   readonly amountInput: Locator;
   readonly periodInput: Locator;
   readonly continueButton: Locator;
@@ -17,7 +16,6 @@ export class LoanPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.calculatorRoot = page.locator('form').filter({ has: page.locator('input[name="amount"]') }).first();
     this.amountInput = page.locator('input[name="amount"]').first();
     this.periodInput = page.locator('input[name="period"]').first();
     this.continueButton = page
@@ -51,14 +49,13 @@ export class LoanPage {
       .poll(
         async () => {
           await this.dismissCookiesIfVisible();
-          const [rootVisible, amountVisible, periodVisible, continueVisible] = await Promise.all([
-            this.calculatorRoot.isVisible().catch(() => false),
+          const [amountVisible, periodVisible, continueVisible] = await Promise.all([
             this.amountInput.isVisible().catch(() => false),
             this.periodInput.isVisible().catch(() => false),
             this.continueButton.isVisible().catch(() => false),
           ]);
 
-          return rootVisible || (amountVisible && periodVisible && continueVisible);
+          return amountVisible && periodVisible && continueVisible;
         },
         {
           timeout,

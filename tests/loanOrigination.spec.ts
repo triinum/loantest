@@ -4,6 +4,8 @@ import { LoanPage } from './pages/LoanPage';
 
 test.describe.configure({ mode: 'parallel' });
 
+const DOM_CONTENT_LOADED_BUDGET_MS = 8_000;
+
 test('UI renders within a basic performance budget and exposes accessible primary controls', async ({ page }) => {
   const loanPage = new LoanPage(page);
   await loanPage.openApplication();
@@ -20,7 +22,7 @@ test('UI renders within a basic performance budget and exposes accessible primar
   });
 
   expect(domContentLoaded).toBeGreaterThan(0);
-  expect(domContentLoaded).toBeLessThan(8_000);
+  expect(domContentLoaded).toBeLessThan(DOM_CONTENT_LOADED_BUDGET_MS);
 });
 
 for (const scenario of HAPPY_CASES) {
