@@ -85,7 +85,7 @@ export class LoanPage {
   }
 
   async waitForContinueReady(timeout = 15_000): Promise<void> {
-    await expect(this.continueButton).toBeVisible();
+    await expect(this.continueButton).toBeVisible({ timeout });
   }
 
   async fillAmount(value: string | number): Promise<void> {

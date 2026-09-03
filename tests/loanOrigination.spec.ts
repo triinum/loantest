@@ -6,7 +6,7 @@ test.describe.configure({ mode: 'parallel' });
 
 const DOM_CONTENT_LOADED_BUDGET_MS = 8_000;
 
-test('UI renders within a basic performance budget and exposes accessible primary controls', async ({ page }) => {
+test('UI exposes accessible primary controls and navigation timing metadata stays within budget', async ({ page }) => {
   const loanPage = new LoanPage(page);
   await loanPage.openApplication();
 
@@ -169,6 +169,22 @@ test('Accidental Double Click does not create duplicate API submissions', async 
       page.waitForLoadState('networkidle'),
     ]).catch(() => undefined);
     await page.waitForLoadState('networkidle').catch(() => undefined);
+    let lastSeenSubmissionCount = -1;
+    await expect
+      .poll(
+        () => {
+          const currentCount = capturedRequests.length;
+          const isStable = currentCount > 0 && currentCount === lastSeenSubmissionCount;
+          lastSeenSubmissionCount = currentCount;
+          return isStable;
+        },
+        {
+          timeout: 2_000,
+          intervals: [250],
+          message: 'Expected application submission traffic to settle before duplicate checks.',
+        },
+      )
+      .toBeTruthy();
 
     submissions.push(
       ...capturedRequests.map((request) => `${request.method()} ${request.url()} ${request.postData() ?? ''}`),
