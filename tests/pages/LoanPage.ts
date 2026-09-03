@@ -202,7 +202,16 @@ export class LoanPage {
       return true;
     }
 
-    const text = await this.readVisibleText();
-    return text.includes(String(amount)) && text.includes(String(period));
+    const [amountVisible, periodVisible] = await Promise.all([
+      this.amountInput.isVisible().catch(() => false),
+      this.periodInput.isVisible().catch(() => false),
+    ]);
+
+    if (!amountVisible || !periodVisible) {
+      return false;
+    }
+
+    const [currentAmount, currentPeriod] = await Promise.all([this.amountInput.inputValue(), this.periodInput.inputValue()]);
+    return currentAmount === String(amount) && currentPeriod === String(period);
   }
 }

@@ -162,6 +162,7 @@ test('Accidental Double Click does not create duplicate API submissions', async 
   try {
     const startUrl = page.url();
     await loanPage.continueButton.dblclick({ delay: 20 });
+    await expect.poll(() => capturedRequests.length, { message: 'Expected at least one application submission request.' }).toBeGreaterThan(0);
     await Promise.race([
       page.waitForURL((url) => url.toString() !== startUrl, { timeout: 5_000 }),
       page.waitForLoadState('networkidle'),

@@ -89,7 +89,7 @@ It runs in these cases:
 - on `push`
 - on `pull_request`
 - on manual `workflow_dispatch`
-- when a GitHub Projects v2 item is edited and its `Status` changes to `Testing` or `In Testing`
+- when GitHub Projects v2 events are available and a project item is edited so its `Status` changes to `Testing` or `In Testing`
 
 Pipeline stages:
 
